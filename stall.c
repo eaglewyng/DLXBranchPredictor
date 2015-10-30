@@ -83,6 +83,9 @@ unsigned long FPSwriter;	/* FP status bit */
  #define WEAKLY_NOT_TAKEN 1
  #define WEAKLY_TAKEN 2
  #define STRONGLY_TAKEN 3
+ #define OP_MASK 0xFC000000
+
+ int dynBPState;
 
 /****** global variables defined here for statistics of interest ***********/
 
@@ -211,13 +214,14 @@ void clearstall(void)
     /*
      * TODO: ALLOCATE BRANCH PREDICTOR DATA STRUCTURES HERE
      */
-
+     dynBPState = WEAKLY_NOT_TAKEN;
 }
 
 int handle_branch(int branch_flag,
 		  int pc, /* PC of instruction */
 		  unsigned long ir, /* The instruction's encoding */
 		  int newpc /* actual target of branch */) {
+
 
    if(branch_flag == NOTABRANCH){
    		return 0;
@@ -229,53 +233,49 @@ int handle_branch(int branch_flag,
    else if(bpType == NOBP){
    		return 2;
    }
+   
+   //static BP
    else if(bpType == STATICBP){
-   		if(newpc > pc){ //forwards branch
+   		if(((ir & OP_MASK) == J) | ((ir & OP_MASK) == JAL)){
+   			return 0;
+   		}
+   		else if(((ir & OP_MASK) == JR) | ((ir & OP_MASK) == JALR)){
+   			totalMP++;
+   			return 3;
+   		}
+   		//forward branch
+   		else if(newpc >= pc){
+   			//predict not taken
+
+   			//if not taken, return 0
    			if(branch_flag == BRANCHNOTTAKEN){
    				return 0;
    			}
+
+   			//if taken, penalize
    			else{
    				totalMP++;
+   				countMP[1]++;
    				return 3;
 
    			}
    		}
-   		else{ //backwards branch
+   		//backward branch
+   		else{ 
+   			//predict taken
+
+   			//if not taken, penalize
    			if(branch_flag == BRANCHNOTTAKEN){
    				totalMP++;
+   				countMP[1]++;
    				return 3;
    			}
+
+   			//if taken, return 0
    			else{
    				return 0;
    			}
    		}
-   		/*
-   		pseudocode:
-   		if(branch.isForward){
-			predictNotTaken();
-			if(branch.shouldBeTaken){
-				updateStatistics;
-				return 3;
-			}
-			else{
-				updateStatistics;
-				return 0;
-			}
-   		}
-   		else{
-			predictTaken();
-			if(branch.shouldBeTaken){
-				updateStatistics;
-				return 0;
-			}
-			else{
-				updateStatistics;
-				return 3;
-			}
-   		}
-   		*/
-
-   		return 2;
 
    }
    //Dynamic BP

@@ -1,0 +1,23 @@
+solve static:
+  Stall cycles
+    integer:  RAW                 0  [ 0%]
+              WAW                 0  [ 0%]
+    ld/store: RAW               396  [ 2%]
+              WAW                 0  [ 0%]
+    FP add:   RAW                 5  [ 0%]
+              WAW                 0  [ 0%]
+    FP mult:  RAW              2360  [15%]
+              WAW                 0  [ 0%]
+    FP div:   RAW               425  [ 2%]
+              WAW                 0  [ 0%]
+    branch:                     868  [ 5%]
+  Total stalls:                4054  [26%]
+  Total nops:                  1356  [ 8%]
+  Total wasted cycles:         5410  [35%]
+  Useful instr:                9993 
+  Total cycles:               15405 
+  CPI:                         1.54
+  Mispred. br/jmps:             434 [39% of 1086 br/jmps]
+    wrong prediction:            79 [ 7%]
+    avg stalls/mispred:        2.00 
+

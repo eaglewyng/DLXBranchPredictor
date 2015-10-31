@@ -227,6 +227,14 @@ int handle_branch(int branch_flag,
    		return 0;
    }
 
+
+   int calcAddr;
+
+   //decode the immediate value and sign extend it if necessary
+   int brInstrImm = (ir & 0x0000FFFF) | ((ir & 0x00008000) ? 0xFFFF0000 : 0);
+   unsigned int brCalcAddr = pc + brInstrImm + 4;
+
+
    if(bpType == PERFECTBP){
    		return 0;
    }
@@ -244,7 +252,7 @@ int handle_branch(int branch_flag,
    			return 3;
    		}
    		//forward branch
-   		else if(newpc >= pc){
+   		else if(brCalcAddr >= pc){
    			//predict not taken
 
    			//if not taken, return 0

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+
 #ifndef max
 #define max(x,y) ((x)>(y)?(x):(y))
 #endif
@@ -84,8 +85,20 @@ unsigned long FPSwriter;	/* FP status bit */
  #define WEAKLY_TAKEN 2
  #define STRONGLY_TAKEN 3
  #define OP_MASK 0xFC000000
+ #define PHT_VALID_MASK 0x80000000;
+ #define PHT_TAG_MASK = 0x7FFFFFFC;
+ #define PHT_STATE_MASK = 0x00000003;
+ #define NULL 0
 
- int dynBPState;
+ unsigned int GHBMASK;
+ unsigned int globalHistoryBits;
+ 
+
+ //format of PHT:
+ // VALID_BIT TAG_BITS STATE_BITS
+
+ unsigned int pHistTable[16][];
+ 
 
 /****** global variables defined here for statistics of interest ***********/
 
@@ -214,7 +227,47 @@ void clearstall(void)
     /*
      * TODO: ALLOCATE BRANCH PREDICTOR DATA STRUCTURES HERE
      */
-     dynBPState = WEAKLY_NOT_TAKEN;
+     //set up masks
+     switch(historyBits){
+     	case 0:
+     		GHBMASK = 0x00000000;
+     	break;
+     	case 1:
+     		GHBMASK = 0x00000001;
+     	break;
+     	case 2:
+     		GHBMASK = 0x00000003;
+     	break;
+     	case 3:
+     		GHBMASK = 0x00000007;
+     	break;
+     	default:
+     		GHBMASK = 0x0000000F;
+     	break;
+     }
+
+
+     //history bits
+     unsigned int numTables = 1 << historyBits;
+
+
+     int j;
+     for(j = 0; j < 16; j++){
+     	if(j < numTables){
+     		//allocate space for the table
+     		pHistTable[j] = (unsigned int[]) malloc(sizeof(unsigned int) * btbSize);
+     		int k;
+
+     		//initialize entries in PHT to zero
+     		for(k = 0; k < btbSize; k++){
+     			pHistTable[j][k] = 0;
+     		}
+     	}
+     	else{
+     		pHistTable[j] = NULL;
+     	}	
+     }
+
 }
 
 int handle_branch(int branch_flag,
@@ -233,7 +286,6 @@ int handle_branch(int branch_flag,
    //decode the immediate value and sign extend it if necessary
    int brInstrImm = (ir & 0x0000FFFF) | ((ir & 0x00008000) ? 0xFFFF0000 : 0);
    unsigned int brCalcAddr = pc + brInstrImm + 4;
-
 
    if(bpType == PERFECTBP){
    		return 0;
@@ -288,6 +340,37 @@ int handle_branch(int branch_flag,
    }
    //Dynamic BP
    else{
+   		//TODO finish
+
+   		/*
+   			HL Algorithm
+   			1. Look up the entry on PHT
+   			2. If it is not valid, guess "not taken"
+   				2a. Initialize the PHT entries based on the result
+   				2b.
+   			2'. If it is valid, use the value of the PHT to guess
+   				2'a. If it has been predicted correctly, then update any state
+   				2'b. IF it hasn't been predicted correctly, also update state
+
+   		*/
+
+   		//check to see if entry is valid
+   		unsigned int currPHTEntry = pHistTable[globalHistoryBits & GHBMASK][(pc >> 2) % btbSize];
+   		if((currPHTEntry & PHT_VALID_MASK) && ((currPHTEntry & PHT_TAG_MASK) == (pc & PHT_TAG_MASK))){
+   			//entry is valid!
+   			
+   		}
+   		else{
+   			//either the entry isn't valid or the tag didn't match up
+   			//what we do should be the same
+   			currPHTEntry = 0;
+   			
+   			//set the tag of the PHT Entry
+   			currPHTEntry = currPHTEntry | (pc & PHT_TAG_MASK);
+
+   			//make prediction and correct
+   			
+   		}
    		return 2;
    }
 }

@@ -92,12 +92,24 @@ unsigned long FPSwriter;	/* FP status bit */
 
  unsigned int GHBMASK;
  unsigned int globalHistoryBits;
+ unsigned int numTables;
+
+
+ //function for updating FSM
+ unsigned char updateFSM(unsigned char currentState, int mispredicted);
  
 
  //format of PHT:
  // VALID_BIT TAG_BITS STATE_BITS
 
+ PHTEntry* phtEntries;
+
  unsigned int pHistTable[16][];
+ struct entry{
+ 	unsigned int pc;
+ 	unsigned int valid;
+ 	char pht[16];
+ } PHTEntry;
  
 
 /****** global variables defined here for statistics of interest ***********/
@@ -249,25 +261,55 @@ void clearstall(void)
 
      //history bits
      unsigned int numTables = 1 << historyBits;
+     phtEntries = malloc(sizeof(PHTEntry) * btbSize);
+
+     int i;
+
+     //initialize PHT entries
+     for(i = 0; i < btbSize; i++){
+     	phtEntries[i].pc = NULL;
+     	phtEntries[i].valid = 0;
+     	phtEntries[i].target = NULL;
+    }
 
 
-     int j;
-     for(j = 0; j < 16; j++){
-     	if(j < numTables){
-     		//allocate space for the table
-     		pHistTable[j] = (unsigned int[]) malloc(sizeof(unsigned int) * btbSize);
-     		int k;
 
-     		//initialize entries in PHT to zero
-     		for(k = 0; k < btbSize; k++){
-     			pHistTable[j][k] = 0;
-     		}
-     	}
-     	else{
-     		pHistTable[j] = NULL;
-     	}	
-     }
+}
 
+unsigned char updateFSM(unsigned char currentState, int mispredicted){
+	if(mispredicted){
+		switch(currentState){
+			case STRONGLY_NOT_TAKEN:
+				return WEAKLY_NOT_TAKEN;
+				break;
+			case WEAKLY_NOT_TAKEN:
+				return STRONGLY_TAKEN;
+				break;
+			case WEAKLY_TAKEN:
+				return STRONGLY_NOT_TAKEN;
+				break;
+			default: 
+				return WEAKLY_TAKEN;
+				break;
+		}
+	}
+	else{
+		switch(currentState){
+			case STRONGLY_NOT_TAKEN:
+				return STRONGLY_NOT_TAKEN;
+				break;
+			case WEAKLY_NOT_TAKEN:
+				return STRONGLY_NOT_TAKEN;
+				break;
+			case WEAKLY_TAKEN:
+				return STRONGLY_TAKEN;
+				break;
+			default: 
+				return STRONGLY_TAKEN;
+				break;
+		}
+
+	}
 }
 
 int handle_branch(int branch_flag,
@@ -354,22 +396,55 @@ int handle_branch(int branch_flag,
 
    		*/
 
+   		//first, calculate the address of the jump or branch
+   		unsigned int calculatedTarget = NULL;
+   		
+
    		//check to see if entry is valid
-   		unsigned int currPHTEntry = pHistTable[globalHistoryBits & GHBMASK][(pc >> 2) % btbSize];
-   		if((currPHTEntry & PHT_VALID_MASK) && ((currPHTEntry & PHT_TAG_MASK) == (pc & PHT_TAG_MASK))){
-   			//entry is valid!
-   			
+   		PHTEntry* currPHTEntry= &phtEntries[(pc >> 2)];
+   		unsigned char currPHTState = currPHTEntry->pht[GHBMASK & globalHistoryBits];
+   		unsigned int currValid = currPHTEntry->valid;
+   		unsigned int currPCTag = currPHTEntry->pc;
+   		unsigned int currPCTarget = currPHTEntry->target;
+   		int mispredicted = 0;
+
+   		if(currValid && (currPCTag == pc)){
+
+   			//entry is valid! check state and find the prediction results
+   			switch(currPHTState){
+   				case STRONGLY_TAKEN:
+   				case WEAKLY_TAKEN:
+   					if(branch_flag == BRANCHNOTTAKEN){
+   						mispredicted = 1;
+   					}
+   					break;
+   				case WEAKLY_NOT_TAKEN:
+   				case STRONGLY_NOT_TAKEN:
+   					if(branch_flag == BRANCHTAKEN){
+   						mispredicted = 1;
+   					}
+   					break;
+   			}
+
+
+
+
+
    		}
    		else{
    			//either the entry isn't valid or the tag didn't match up
    			//what we do should be the same
-   			currPHTEntry = 0;
+   			countMP[0]++;
    			
    			//set the tag of the PHT Entry
-   			currPHTEntry = currPHTEntry | (pc & PHT_TAG_MASK);
+   			currPHTEntry -> pc = pc;
+   			currPHTEntry -> valid = 1;
+
+
+   			
 
    			//make prediction and correct
-   			
+
    		}
    		return 2;
    }

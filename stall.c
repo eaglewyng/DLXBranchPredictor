@@ -92,7 +92,7 @@ unsigned long FPSwriter;	/* FP status bit */
 
 
  //function for updating FSM
- unsigned char updateFSM(unsigned char currentState, int mispredicted);
+ unsigned char updateFSM(unsigned char currentState, int bflag);
  
 
  //format of PHT:
@@ -105,10 +105,10 @@ unsigned long FPSwriter;	/* FP status bit */
  	unsigned int valid;
  	int target;
  	char pht[16];
- } PHTEntry;
+ } BTBEntry;
  
 
- PHTEntry *phtEntries;
+ BTBEntry *btbEntries;
 /****** global variables defined here for statistics of interest ***********/
 
 #define MAXUNITS 5
@@ -257,15 +257,15 @@ void clearstall(void)
 
 
      //history bits
-     unsigned int numTables = 1 << historyBits;
-     phtEntries = malloc(sizeof(PHTEntry) * btbSize);
+     numTables = 1 << historyBits;
+     btbEntries = malloc(sizeof(BTBEntry) * btbSize);
 
 
      //initialize PHT entries
      for(i = 0; i < btbSize; i++){
-     	phtEntries[i].pc = NULL;
-     	phtEntries[i].valid = 0;
-     	phtEntries[i].target = NULL;
+     	btbEntries[i].pc = 0;
+     	btbEntries[i].valid = 0;
+     	btbEntries[i].target = 0;
     }
 
     globalHistoryBits = 0;
@@ -274,8 +274,8 @@ void clearstall(void)
 
 }
 
-unsigned char updateFSM(unsigned char currentState, int mispredicted){
-	if(mispredicted){
+unsigned char updateFSM(unsigned char currentState, int bflag){
+	if(bflag == BRANCHTAKEN){
 		switch(currentState){
 			case STRONGLY_NOT_TAKEN:
 				return WEAKLY_NOT_TAKEN;
@@ -284,10 +284,10 @@ unsigned char updateFSM(unsigned char currentState, int mispredicted){
 				return STRONGLY_TAKEN;
 				break;
 			case WEAKLY_TAKEN:
-				return STRONGLY_NOT_TAKEN;
+				return STRONGLY_TAKEN;
 				break;
-			default: 
-				return WEAKLY_TAKEN;
+			case STRONGLY_TAKEN: 
+				return STRONGLY_TAKEN;
 				break;
 		}
 	}
@@ -300,10 +300,10 @@ unsigned char updateFSM(unsigned char currentState, int mispredicted){
 				return STRONGLY_NOT_TAKEN;
 				break;
 			case WEAKLY_TAKEN:
-				return STRONGLY_TAKEN;
+				return STRONGLY_NOT_TAKEN;
 				break;
-			default: 
-				return STRONGLY_TAKEN;
+			case STRONGLY_TAKEN: 
+				return WEAKLY_TAKEN;
 				break;
 		}
 
@@ -396,13 +396,12 @@ int handle_branch(int branch_flag,
 
 
    		//check to see if entry is valid
-   		PHTEntry* currPHTEntry= &phtEntries[(pc >> 2) % btbSize];
-   		unsigned char currPHTState = currPHTEntry->pht[GHBMASK & globalHistoryBits];
-   		unsigned int currValid = currPHTEntry->valid;
-   		int currPCTag = currPHTEntry->pc;
-   		int currPCTarget = currPHTEntry->target;
+   		BTBEntry* currBTBEntry= &btbEntries[(pc >> 2) % btbSize];
+   		unsigned char currPHTState = currBTBEntry->pht[GHBMASK & globalHistoryBits];
+   		unsigned int currValid = currBTBEntry->valid;
+   		int currPCTag = currBTBEntry->pc;
+   		int currPCTarget = currBTBEntry->target;
    		int mispredicted = 0;
-   		int rightTarget = 1;
    		int nGHBEntry = 0;
 
    		if(currValid && (currPCTag == pc)){
@@ -411,53 +410,64 @@ int handle_branch(int branch_flag,
    			switch(currPHTState){
    				case STRONGLY_TAKEN:
    				case WEAKLY_TAKEN:
+   					//mispredicted
    					if(branch_flag == BRANCHNOTTAKEN){
-   						mispredicted = 1;
+
+   						countMP[1]++;
+   						totalMP++;
+
+   						currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
+   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
+   						return 3;
    					}
+
+   					//predicted correctly
    					else{
    						nGHBEntry = 1;
+   						if(currPCTarget != newpc){
+   							currBTBEntry->target = newpc;
+   							countMP[2]++;
+   							totalMP++;
+   							currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
+	   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
+	   						return 3;
+   						}
+   						else{
+   							currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
+	   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
+	   						return 0;
+   						}
+   						
    					}
    					break;
    				case WEAKLY_NOT_TAKEN:
    				case STRONGLY_NOT_TAKEN:
+
+   					//mispredicted
    					if(branch_flag == BRANCHTAKEN){
    						mispredicted = 1;
    						nGHBEntry = 1;
+   						countMP[1]++;
+   						totalMP++;
+
+   						if(currPCTarget != newpc){
+   							currBTBEntry->target = newpc;
+   						}
+
+						currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
+   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
+   						return 3;
+
+   					}
+   					
+   					//predicted correctly
+   					else{
+   						currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
+   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
+   						return 0;
    					}
    					break;
    			}
-
-   			if(currPCTarget != newpc){
-   				rightTarget = 0;
-   			}
-
-   			//update the statistics
-   			if(mispredicted){
-   				countMP[1]++;
-   				totalMP++;
-   			}
-   			else if(!rightTarget){
-   				countMP[2]++;
-   				//TODO verify that this is OK
-   				totalMP++;
-   			}
-
-   			//update the entry
-   			currPHTEntry->target = newpc;
-   			currPHTEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, mispredicted);
-
-   			//update GHB
-   			globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
-
-
-   			//return correct amount of stalls
-   			if(mispredicted || !rightTarget){
-   				return 3;
-   			}
-   			else{
-   				return 0;
-   			}
-
 
    		}
    		else{
@@ -466,9 +476,9 @@ int handle_branch(int branch_flag,
    			countMP[0]++;
    			
    			//set the tag of the PHT Entry
-   			currPHTEntry -> pc = pc;
-   			currPHTEntry -> valid = 1;
-   			currPHTEntry -> target = newpc;
+   			currBTBEntry -> pc = pc;
+   			currBTBEntry -> valid = 1;
+   			currBTBEntry -> target = newpc;
 
 
    			//make prediction and correct
@@ -476,7 +486,7 @@ int handle_branch(int branch_flag,
    			if(branch_flag == BRANCHNOTTAKEN){
    				//initialize all PHT entries
    				for(i = 0; i < numTables; i++){
-   					currPHTEntry->pht[i] = STRONGLY_NOT_TAKEN;
+   					currBTBEntry->pht[i] = STRONGLY_NOT_TAKEN;
    				}
    				globalHistoryBits = (globalHistoryBits << 1) | 0;
    				return 0;
@@ -485,7 +495,7 @@ int handle_branch(int branch_flag,
    				//mispredicted
    				totalMP++;
    				for(i = 0; i < numTables; i++){
-   					currPHTEntry->pht[i] = STRONGLY_TAKEN;
+   					currBTBEntry->pht[i] = STRONGLY_TAKEN;
    				}
    				globalHistoryBits = (globalHistoryBits << 1) | 1;
    				return 3;
@@ -966,5 +976,15 @@ void zpressed(void)
       printf("No dynamic branch predictor state\n");
       return;
     }
+
+    printf("index\tPC\tBTA\t");
+
+    for(i = 0; i < numTables; i++){
+    	printf("PHT%d\t",i);
+    }
+    printf("%d <-- Global History Bits\n",historyBits);
+
+
+   
 
 }

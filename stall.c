@@ -101,9 +101,9 @@ unsigned long FPSwriter;	/* FP status bit */
 
 
  typedef struct entry {
- 	unsigned int pc;
+ 	int pc;
  	unsigned int valid;
- 	unsigned int target;
+ 	int target;
  	char pht[16];
  } PHTEntry;
  
@@ -399,8 +399,8 @@ int handle_branch(int branch_flag,
    		PHTEntry* currPHTEntry= &phtEntries[(pc >> 2) % btbSize];
    		unsigned char currPHTState = currPHTEntry->pht[GHBMASK & globalHistoryBits];
    		unsigned int currValid = currPHTEntry->valid;
-   		unsigned int currPCTag = currPHTEntry->pc;
-   		unsigned int currPCTarget = currPHTEntry->target;
+   		int currPCTag = currPHTEntry->pc;
+   		int currPCTarget = currPHTEntry->target;
    		int mispredicted = 0;
    		int rightTarget = 1;
    		int nGHBEntry = 0;

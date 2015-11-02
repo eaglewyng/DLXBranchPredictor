@@ -88,7 +88,6 @@ unsigned long FPSwriter;	/* FP status bit */
  #define PHT_VALID_MASK 0x80000000;
  #define PHT_TAG_MASK = 0x7FFFFFFC;
  #define PHT_STATE_MASK = 0x00000003;
- #define NULL 0
 
  unsigned int GHBMASK;
  unsigned int globalHistoryBits;
@@ -102,16 +101,17 @@ unsigned long FPSwriter;	/* FP status bit */
  //format of PHT:
  // VALID_BIT TAG_BITS STATE_BITS
 
- PHTEntry* phtEntries;
 
- unsigned int pHistTable[16][];
- struct entry{
+
+ typedef struct entry {
  	unsigned int pc;
  	unsigned int valid;
+ 	unsigned int target;
  	char pht[16];
  } PHTEntry;
  
 
+ PHTEntry *phtEntries;
 /****** global variables defined here for statistics of interest ***********/
 
 #define MAXUNITS 5
@@ -263,7 +263,6 @@ void clearstall(void)
      unsigned int numTables = 1 << historyBits;
      phtEntries = malloc(sizeof(PHTEntry) * btbSize);
 
-     int i;
 
      //initialize PHT entries
      for(i = 0; i < btbSize; i++){
@@ -398,7 +397,15 @@ int handle_branch(int branch_flag,
 
    		//first, calculate the address of the jump or branch
    		unsigned int calculatedTarget = NULL;
-   		
+   		if(((ir & OP_MASK) == J) | ((ir & OP_MASK) == JAL)){
+   			return 0;
+   		}
+   		else if(((ir & OP_MASK) == JR) | ((ir & OP_MASK) == JALR)){
+   			totalMP++;
+   			return 3;
+   		}
+
+
 
    		//check to see if entry is valid
    		PHTEntry* currPHTEntry= &phtEntries[(pc >> 2)];

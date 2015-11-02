@@ -104,7 +104,7 @@ unsigned long FPSwriter;	/* FP status bit */
  	unsigned int pc;
  	unsigned int valid;
  	unsigned int target;
- 	char pht[16];
+ 	unsigned char pht[16];
  } PHTEntry;
  
 

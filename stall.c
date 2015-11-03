@@ -380,22 +380,8 @@ int handle_branch(int branch_flag,
    }
    //Dynamic BP
    else{
-   		//TODO finish
 
-   		/*
-   			HL Algorithm
-   			1. Look up the entry on PHT
-   			2. If it is not valid, guess "not taken"
-   				2a. Initialize the PHT entries based on the result
-   				2b.
-   			2'. If it is valid, use the value of the PHT to guess
-   				2'a. If it has been predicted correctly, then update any state
-   				2'b. IF it hasn't been predicted correctly, also update state
-
-   		*/
-
-
-   		//check to see if entry is valid
+   		//get all the information I need to see what I need to update
    		BTBEntry* currBTBEntry= &btbEntries[(pc >> 2) % btbSize];
    		unsigned char currPHTState = currBTBEntry->pht[GHBMASK & globalHistoryBits];
    		unsigned int currValid = currBTBEntry->valid;
@@ -425,6 +411,7 @@ int handle_branch(int branch_flag,
    					else{
    						nGHBEntry = 1;
    						if(currPCTarget != newpc){
+   							//miss on target. Update in BTB
    							currBTBEntry->target = newpc;
    							countMP[2]++;
    							totalMP++;
@@ -433,6 +420,7 @@ int handle_branch(int branch_flag,
 	   						return 3;
    						}
    						else{
+   							//target hit. no stalls
    							currBTBEntry->pht[GHBMASK & globalHistoryBits] = updateFSM(currPHTState, branch_flag);
 	   						globalHistoryBits = (globalHistoryBits << 1) | nGHBEntry;
 	   						return 0;
@@ -451,6 +439,7 @@ int handle_branch(int branch_flag,
    						totalMP++;
 
    						if(currPCTarget != newpc){
+   							//update branch target
    							currBTBEntry->target = newpc;
    						}
 
@@ -484,7 +473,7 @@ int handle_branch(int branch_flag,
    			//make prediction and correct
    			int i;
    			if(branch_flag == BRANCHNOTTAKEN){
-   				//initialize all PHT entries
+   				//initialize all PHT entries to not taken
    				for(i = 0; i < numTables; i++){
    					currBTBEntry->pht[i] = STRONGLY_NOT_TAKEN;
    				}
@@ -492,7 +481,7 @@ int handle_branch(int branch_flag,
    				return 0;
    			}
    			else{
-   				//mispredicted
+   				//mispredicted -- initialize to strongly taken
    				totalMP++;
    				for(i = 0; i < numTables; i++){
    					currBTBEntry->pht[i] = STRONGLY_TAKEN;
